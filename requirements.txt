@@ -1,0 +1,13 @@
+Flask
+python-dotenv
+groq
+gunicorn
+sounddevice
+wavio
+speechrecognition
+gTTs
+PyPDF2
+langchain
+faiss-cpu
+sentence-transformers
+deep-translator
