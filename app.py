@@ -1,16 +1,12 @@
 from flask import Flask, render_template, request, jsonify
-import sounddevice as sd
-import wavio
-import speech_recognition as sr
-from gtts import gTTS
-import os
-from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import SentenceTransformerEmbeddings
 from langchain.vectorstores import FAISS
 from groq import Groq
 from deep_translator import GoogleTranslator
+from dotenv import load_dotenv
+import os
 
 # Load environment variables
 load_dotenv()
@@ -56,7 +52,7 @@ def get_vectorstore(chunks):
 class GroqChat:
     def __init__(self, model_id):
         self.model_id = model_id
-        self.client = Groq()  # Ensure Groq client is instantiated correctly
+        self.client = Groq()
 
     def __call__(self, messages):
         completion = self.client.chat.completions.create(
@@ -73,34 +69,6 @@ class GroqChat:
         for chunk in completion:
             response += chunk.choices[0].delta.content or ""
         return response
-
-# Function to record audio
-def record_audio(duration=5, fs=44100, filename="static/voice_input.wav"):
-    audio_data = sd.rec(int(duration * fs), samplerate=fs, channels=1)
-    sd.wait()  # Wait until recording is finished
-    wavio.write(filename, audio_data, fs, sampwidth=2)
-    return filename
-
-# Function to recognize speech using Google Speech API
-def recognize_speech():
-    recognizer = sr.Recognizer()
-    audio_file = record_audio()
-
-    with sr.AudioFile(audio_file) as source:
-        audio = recognizer.record(source)
-
-    try:
-        question = recognizer.recognize_google(audio)
-        return question
-    except sr.UnknownValueError:
-        return "Sorry, I couldn't understand the audio."
-    except sr.RequestError as e:
-        return f"Google Speech Recognition service error: {e}"
-
-# Function to convert text to speech using gTTS
-def text_to_speech(text, lang='en'):
-    tts = gTTS(text=text, lang=lang)
-    tts.save("static/response.mp3")
 
 # Function to handle the user's question and generate a response using Groq
 def handle_question(question, vectorstore, user_lang):
@@ -184,17 +152,9 @@ Exercise Recommendations
 
     # Format the response for display with line breaks
     formatted_response = response.replace("\n", "<br>")
-    # formatted_response = response.replace("\n", "<br>").replace("*", "")
-
-    # Clean up the response for speech (remove tags and special characters)
-    speech_response = response.replace("<br>", "").replace("*", "")
 
     # Translate the response back to the original language
     response_translated = detect_and_translate(formatted_response, target_lang=user_lang)
-    speech_translated = detect_and_translate(speech_response, target_lang=user_lang)
-
-    # Convert response to speech
-    text_to_speech(speech_translated, lang=user_lang)
     return response_translated
 
 @app.route('/')
@@ -208,7 +168,7 @@ def process_question():
 
     if question:
         response = handle_question(question, vectorstore, user_lang)
-        return jsonify({"text": response, "audio": "/static/response.mp3"})
+        return jsonify({"text": response})
     return jsonify({"error": "No question provided."})
 
 @app.route('/upload_pdf', methods=["POST"])
@@ -235,11 +195,6 @@ def upload_pdf():
     except Exception as e:
         return jsonify({"error": f"An error occurred while processing the PDFs: {str(e)}"})
 
-@app.route('/recognize_speech-route', methods=["POST"])
-def recognize_speech_route():
-    question = recognize_speech()
-    return jsonify({"transcription": question})
-
 if __name__ == '__main__':
     default_pdf_path = os.getenv("DEFAULT_PDF_PATH")
     if default_pdf_path and os.path.exists(default_pdf_path):
@@ -250,4 +205,4 @@ if __name__ == '__main__':
     else:
         vectorstore = None
 
-    app.run(debug=True)
+    app.run(debug=True, host='127.0.0.1', port=int(os.getenv("PORT", 5000)))
